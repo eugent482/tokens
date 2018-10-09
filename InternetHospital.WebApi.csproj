@@ -13,9 +13,4 @@
     <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="2.1.1" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\InternetHospital.BusinessLogic\InternetHospital.BusinessLogic.csproj" />
-    <ProjectReference Include="..\InternetHospital.DataAccess\InternetHospital.DataAccess.csproj" />
-  </ItemGroup>
-
 </Project>

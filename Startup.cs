@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using InternetHospital.WebApi.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -28,6 +29,13 @@ namespace InternetHospital.WebApi
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            // configure strongly typed settings objects
+            var appSettingsSection = Configuration.GetSection("AppSettings");
+            services.Configure<AppSettings>(appSettingsSection);
+
+
+            // configure jwt authentication
+            var appSettings = appSettingsSection.Get<AppSettings>();    
             services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
         {
@@ -37,10 +45,10 @@ namespace InternetHospital.WebApi
                 ValidateAudience = false,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
-                ValidIssuer = "https://localhost:44357",
-                //ValidAudience = "https://localhost:44357",
+                ValidIssuer = appSettings.JwtIssuer,
+                ClockSkew = TimeSpan.Zero,
                 IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes("uyruhdsjkfhjkhvnbxcnbvsdhfgdhsgfsdgfh"))
+                    Encoding.UTF8.GetBytes(appSettings.JwtKey))
             };
         });
 
@@ -50,7 +58,7 @@ namespace InternetHospital.WebApi
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
 
-            services.AddCors(); //for enable CROS
+            services.AddCors(); //for enable CORS
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -68,7 +76,7 @@ namespace InternetHospital.WebApi
             app.UseAuthentication();
 
 
-            app.UseCors(options => // for enable CROS
+            app.UseCors(options => // for enable CORS
             options
             .AllowAnyOrigin()
             .AllowAnyMethod()

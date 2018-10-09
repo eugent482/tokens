@@ -9,6 +9,7 @@ using InternetHospital.WebApi.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace InternetHospital.WebApi.Controllers
@@ -21,9 +22,18 @@ namespace InternetHospital.WebApi.Controllers
         
         private List<User> _users = new List<User>
         {
-            new User { Id = 1, FirstName = "Test", LastName = "User", Username = "test", Password = "test" }
+            new User { Id = 1, FirstName = "Test", LastName = "User", Username = "test", Password = "test",Role="Admin" }
         };
+        private List<RefreshToken> _tokens;
+        private readonly AppSettings _appSettings;
 
+
+
+        public AuthController(IOptions<AppSettings> appSettings)
+        {
+            _tokens = new List<RefreshToken>();
+            _appSettings = appSettings.Value;
+        }
 
         [AllowAnonymous]
         [HttpPost("signin")]
@@ -42,41 +52,95 @@ namespace InternetHospital.WebApi.Controllers
             if (user == null)
                 return BadRequest(new { message = "Username or password is incorrect" });
 
+
+
+
             var claims = new[]
         {
-            new Claim(ClaimTypes.Name, user.Id.ToString())
+            new Claim(ClaimTypes.Name, user.Id.ToString()),
+            new Claim(ClaimTypes.Role, user.Role)
         };
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("uyruhdsjkfhjkhvnbxcnbvsdhfgdhsgfsdgfh"));
+            var newRefreshToken = new RefreshToken
+            {
+                UserId = user.Id,
+                Token = Guid.NewGuid().ToString(),
+                ExpiresDate = DateTime.UtcNow.AddDays(15),
+                Revoked=false,
+                User=user // TODO delete
+                
+            };
+            _tokens.Add(newRefreshToken);
+
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_appSettings.JwtKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var now = DateTime.UtcNow;
 
 
             var token = new JwtSecurityToken(
-                issuer: "https://localhost:44357",
-               // audience: "https://localhost:44357",
+                issuer: _appSettings.JwtIssuer,
                 notBefore:now,
                 claims: claims,
-                expires:now.AddMinutes(5),
+                expires:now.AddMinutes(_appSettings.JwtExpireMinutes),
                 signingCredentials: creds);
-           
+
 
             return Ok(new
             {
                 access_token = new JwtSecurityTokenHandler().WriteToken(token),
-                refresh_token="hello"
+                refresh_token = newRefreshToken.Token,
+                user_id=user.Id
             });
 
         }
 
         [AllowAnonymous]
         [HttpPost("refresh")]
-        public IActionResult Refresh(string access,string refresh)
+        public IActionResult Refresh(string refresh)
         {
-            
+
+            var rtoken = _tokens.FirstOrDefault(x => x.Token == refresh);
+
+            if (rtoken == null)
+                return BadRequest();
+
+            if (rtoken.ExpiresDate < DateTime.UtcNow)
+                return Unauthorized();
+
+            if (rtoken.Revoked==true)
+                return Unauthorized();       
 
 
-            return Ok();
+
+            var claims = new[]
+        {
+            new Claim(ClaimTypes.Name, rtoken.User.Id.ToString()),
+            new Claim(ClaimTypes.Role, rtoken.User.Role)
+        };
+
+           
+
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_appSettings.JwtKey));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var now = DateTime.UtcNow;
+
+
+            var token = new JwtSecurityToken(
+                issuer: _appSettings.JwtIssuer,
+                notBefore: now,
+                claims: claims,
+                expires: now.AddMinutes(_appSettings.JwtExpireMinutes),
+                signingCredentials: creds);
+
+
+            return Ok(new
+            {
+                access_token = new JwtSecurityTokenHandler().WriteToken(token),
+                refresh_token = rtoken.Token,
+                user_id = rtoken.User.Id
+            });
         }
 
 

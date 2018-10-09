@@ -17,11 +17,10 @@ namespace InternetHospital.WebApi.Auth
 
         public string Token { get; set; }
 
-        public DateTime CreateDate { get; set; }
         public DateTime ExpiresDate { get; set; }
 
         public bool Revoked { get; set; }
 
-        public virtual ApplicationUser User { get; set; }
+        public virtual User User { get; set; }
     }
 }
