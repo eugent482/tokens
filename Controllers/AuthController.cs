@@ -37,13 +37,13 @@ namespace InternetHospital.WebApi.Controllers
 
         [AllowAnonymous]
         [HttpPost("signin")]
-        public IActionResult SignIn(string userf, string password)
+        public IActionResult SignIn(LoginForm form)
         {
             User user = null;
             //User authentication
             try
             {
-                user = _users.SingleOrDefault(x => x.Username == userf && x.Password == password);
+                user = _users.SingleOrDefault(x => x.Username == form.username && x.Password == form.password);
             }
             catch (Exception)
             {
