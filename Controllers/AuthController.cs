@@ -1,17 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using InternetHospital.WebApi.Auth;
+using InternetHospital.WebApi.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-
+using static InternetHospital.WebApi.Entities.PostgreContext;
 namespace InternetHospital.WebApi.Controllers
 {
     [Authorize]
@@ -19,20 +21,18 @@ namespace InternetHospital.WebApi.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        
-        private List<User> _users = new List<User>
-        {
-            new User { Id = 1, FirstName = "Test", LastName = "User", Username = "test", Password = "test",Role="Admin" }
-        };
-        private List<RefreshToken> _tokens;
-        private readonly AppSettings _appSettings;
 
+
+        private readonly AppSettings _appSettings;
+        private ApplicationContext _context;
 
 
         public AuthController(IOptions<AppSettings> appSettings)
         {
-            _tokens = new List<RefreshToken>();
             _appSettings = appSettings.Value;
+            _context = new ApplicationContext();
+           
+
         }
 
         [AllowAnonymous]
@@ -43,7 +43,10 @@ namespace InternetHospital.WebApi.Controllers
             //User authentication
             try
             {
-                user = _users.SingleOrDefault(x => x.Username == form.username && x.Password == form.password);
+
+                user = _context.Users.FirstOrDefault(x => x.Username == form.username && x.Password == form.password);
+                Debug.Write(form.username == "test");
+
             }
             catch (Exception)
             {
@@ -55,7 +58,7 @@ namespace InternetHospital.WebApi.Controllers
 
 
 
-            var claims = new[]
+            var claims = new Claim[]
         {
             new Claim(ClaimTypes.Name, user.Id.ToString()),
             new Claim(ClaimTypes.Role, user.Role)
@@ -66,60 +69,13 @@ namespace InternetHospital.WebApi.Controllers
                 UserId = user.Id,
                 Token = Guid.NewGuid().ToString(),
                 ExpiresDate = DateTime.UtcNow.AddDays(15),
-                Revoked=false,
-                User=user // TODO delete
-                
+                Revoked = false
             };
-            _tokens.Add(newRefreshToken);
 
+            //
+            _context.RefreshTokens.Add(newRefreshToken);
+            _context.SaveChanges();
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_appSettings.JwtKey));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-            var now = DateTime.UtcNow;
-
-
-            var token = new JwtSecurityToken(
-                issuer: _appSettings.JwtIssuer,
-                notBefore:now,
-                claims: claims,
-                expires:now.AddMinutes(_appSettings.JwtExpireMinutes),
-                signingCredentials: creds);
-
-
-            return Ok(new
-            {
-                access_token = new JwtSecurityTokenHandler().WriteToken(token),
-                refresh_token = newRefreshToken.Token,
-                user_id=user.Id
-            });
-
-        }
-
-        [AllowAnonymous]
-        [HttpPost("refresh")]
-        public IActionResult Refresh(string refresh)
-        {
-
-            var rtoken = _tokens.FirstOrDefault(x => x.Token == refresh);
-
-            if (rtoken == null)
-                return BadRequest();
-
-            if (rtoken.ExpiresDate < DateTime.UtcNow)
-                return Unauthorized();
-
-            if (rtoken.Revoked==true)
-                return Unauthorized();       
-
-
-
-            var claims = new[]
-        {
-            new Claim(ClaimTypes.Name, rtoken.User.Id.ToString()),
-            new Claim(ClaimTypes.Role, rtoken.User.Role)
-        };
-
-           
 
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_appSettings.JwtKey));
@@ -138,23 +94,74 @@ namespace InternetHospital.WebApi.Controllers
             return Ok(new
             {
                 access_token = new JwtSecurityTokenHandler().WriteToken(token),
-                refresh_token = rtoken.Token,
-                user_id = rtoken.User.Id
+                refresh_token = newRefreshToken.Token,
+                user_id = user.Id
             });
+
+        }
+
+        [AllowAnonymous]
+        [HttpPost("refresh")]
+        public IActionResult Refresh(RToken refresh)
+        {
+            RefreshToken rtoken = _context.RefreshTokens.FirstOrDefault(x => x.Token == refresh.Refresh);
+
+
+            if (rtoken == null)
+                return BadRequest("invalid_grant");
+
+            if (rtoken.ExpiresDate < DateTime.UtcNow)
+                return BadRequest("invalid_grant");
+
+            if (rtoken.Revoked == true)
+                return BadRequest("invalid_grant");
+
+            User user = _context.Users.Find(rtoken.UserId);
+
+            var claims = new[]{
+            new Claim(ClaimTypes.Name, user.Id.ToString()),
+            new Claim(ClaimTypes.Role, user.Role)
+        };
+
+
+
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_appSettings.JwtKey));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var now = DateTime.UtcNow;
+
+
+            var token = new JwtSecurityToken(
+                issuer: _appSettings.JwtIssuer,
+                notBefore: now,
+                claims: claims,
+                expires: now.AddMinutes(_appSettings.JwtExpireMinutes),
+                signingCredentials: creds);
+
+            string newrefreshtoken = Guid.NewGuid().ToString();
+            rtoken.Token = newrefreshtoken;
+            _context.SaveChanges();
+            return Ok(new
+            {
+                access_token = new JwtSecurityTokenHandler().WriteToken(token),
+                refresh_token = rtoken.Token,
+                user_id = rtoken.UserId
+            });
+
         }
 
 
         [AllowAnonymous]
         [HttpGet("getallfree")]
         public IActionResult GetAllFree()
-        {           
-            return Ok(_users);
+        {
+            return Ok(_context.Users.ToList());
         }
 
         [HttpGet("getallprotected")]
         public IActionResult GetAllProtected()
         {
-            return Ok(_users);
+            return Ok(_context.Users.ToList());
         }
     }
 }
