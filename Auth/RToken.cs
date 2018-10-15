@@ -8,5 +8,6 @@ namespace InternetHospital.WebApi.Auth
     public class RToken
     {
         public string Refresh { get; set; }
+
     }
 }

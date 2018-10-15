@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using InternetHospital.WebApi.Auth;
+using InternetHospital.WebApi.Controllers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
@@ -53,6 +56,17 @@ namespace InternetHospital.WebApi
         });
 
 
+
+            // configure authorization policy
+            services.AddSingleton<IAuthorizationHandler, StatusHandler>();
+            services.AddAuthorization(options =>
+            {
+                options.AddPolicy("StatPolicy",
+                    policy => policy
+                    .RequireClaim(ClaimTypes.GroupSid)
+                    .AddRequirements(new StatusRequirement("Eugen")));
+               
+            });
 
 
 
